@@ -2,7 +2,7 @@
   "name": "vsex-chromadb-viewer",
   "displayName": "ChromaDB Viewer",
   "description": "View and manage ChromaDB (tenants, databases, collections, vectors) from the VS Code sidebar",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "engines": {
     "vscode": "^1.85.0"
   },
