@@ -40,8 +40,8 @@ jobs:
       - name: Compile TypeScript
         run: npm run compile
 
-      - name: Run tests
-        run: npm test
+      - name: Run tests (headless X11 via Xvfb)
+        run: xvfb-run -s "-screen 0 1280x1024x24" npm test
         env:
           CI: true
 

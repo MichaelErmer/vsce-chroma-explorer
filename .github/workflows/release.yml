@@ -25,8 +25,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run CI tests
-        run: npm test
+      - name: Run CI tests (headless X11 via Xvfb)
+        run: xvfb-run -s "-screen 0 1280x1024x24" npm test
 
       - name: Build webview UI
         run: npm run build-webview
