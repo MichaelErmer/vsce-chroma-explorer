@@ -15,6 +15,10 @@ Features
 - Securely store API key in VS Code SecretStorage
 - Integration tests that run against a local Docker Chroma instance
 
+![screenshot 1](./resources/images/screenshot1.png)
+
+![screenshot 2](./resources/images/screenshot2.png)
+
 Install & run (dev)
 1. npm install
 2. npm run compile

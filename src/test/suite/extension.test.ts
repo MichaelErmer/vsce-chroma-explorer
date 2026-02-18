@@ -49,7 +49,7 @@ describe('ChromaDB Commands - integration', function () {
     assert.strictEqual(ok, true);
   });
 
-  it('createTenant + deleteTenant', async () => {
+  it('createTenant', async () => {
     const tenantName = `it_tenant_${runId}`;
     const restoreInput = stubInputSequence([tenantName]);
     await vscode.commands.executeCommand('chromadb.createTenant');
@@ -61,14 +61,6 @@ describe('ChromaDB Commands - integration', function () {
 
     // cleanup db then tenant
     await client.deleteDatabase(tenantName, `verify_db_${runId}`);
-
-    const restoreWarn = stubWarning('Delete');
-    try {
-      await vscode.commands.executeCommand('chromadb.deleteTenant', { name: tenantName });
-    } catch (err) {
-      // some Chroma deployments do not support deleting tenants via REST — ignore
-    }
-    restoreWarn();
   });
 
   it('createDatabase + deleteDatabase', async () => {
@@ -97,9 +89,6 @@ describe('ChromaDB Commands - integration', function () {
 
     // restore previous workspace tenant
     await vscode.workspace.getConfiguration('chromadb').update('tenant', prevTenant || 'test_tenant', vscode.ConfigurationTarget.Global);
-
-    // cleanup tenant (best-effort, some deployments do not support tenant deletion)
-    try { await client.deleteTenant(tenantName); } catch (_) { /* ignore */ }
   });
 
   it('createCollection / rename / delete', async () => {

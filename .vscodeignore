@@ -5,3 +5,4 @@ out/test/**
 **/*.map
 **/*.ts
 webview-ui/node_modules/**
+!node_modules/chromadb/**

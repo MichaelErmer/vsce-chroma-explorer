@@ -12,15 +12,4 @@ export function registerTenantCommands(context: vscode.ExtensionContext, provide
     })
   );
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand('chromadb.deleteTenant', async (node) => {
-      const tenant = node && node.name ? node.name : await vscode.window.showInputBox({ prompt: 'Tenant to delete' });
-      if (!tenant) { return; }
-      const ok = await vscode.window.showWarningMessage(`Delete tenant '${tenant}'? This is irreversible.`, { modal: true }, 'Delete');
-      if (ok !== 'Delete') { return; }
-      await provider.client.deleteTenant(tenant);
-      vscode.window.showInformationMessage(`Tenant '${tenant}' deleted`);
-      provider.refresh();
-    })
-  );
 }

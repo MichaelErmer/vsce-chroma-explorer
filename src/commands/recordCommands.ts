@@ -59,8 +59,12 @@ export function registerRecordCommands(context: vscode.ExtensionContext, provide
       if (embInput) {
         try { const parsed = JSON.parse(embInput); if (Array.isArray(parsed)) embedding = parsed as number[]; } catch (e) { /* ignore */ }
       }
-      // ensure a valid embedding (server requires at least one dimension) — default to [0.0]
-      if (!Array.isArray(embedding) || embedding.length === 0) { embedding = [0.0]; }
+      // ensure a valid embedding (server requires at least one dimension) — use workspace default when not provided
+      if (!Array.isArray(embedding) || embedding.length === 0) {
+        const cfg = vscode.workspace.getConfiguration('chromadb');
+        const def = cfg.get<number[]>('defaultEmbedding') || [0.0];
+        embedding = Array.isArray(def) && def.length > 0 ? def : [0.0];
+      }
       await provider.client.addRecord(tenant, database, collection, { id: id || undefined, document: doc || '', embedding });
       vscode.window.showInformationMessage('Record added');
       provider.refresh();

@@ -6,3 +6,4 @@ dist/
 .env
 .vscode-test
 docker
+*.vsix

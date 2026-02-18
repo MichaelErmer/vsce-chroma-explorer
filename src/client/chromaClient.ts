@@ -1,79 +1,39 @@
-function generateId() { return 'id_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+import { ChromaClient as SDKChromaClient, AdminClient } from 'chromadb';
 
 export type ChromaRecord = { id: string; document?: string; metadata?: any; embedding?: number[] };
 
 export class ChromaDbClient {
   private connected = false;
-  private config: any = {};
-  private mockData: any;
+  private config: { host?: string; port?: number; ssl?: boolean; tenant?: string; database?: string; apiKey?: string } = {};
+  private sdkClient?: any;
+  private adminClient?: any;
 
   constructor() {
-    // keep mock data as fallback and for initial UI
-    this.mockData = {
-      tenants: [
-        {
-          name: 'default_tenant',
-          databases: [
-            {
-              name: 'default_database',
-              collections: [
-                {
-                  name: 'example_collection',
-                  records: [
-                    { id: 'r1', document: 'Hello world', metadata: { source: 'demo' }, embedding: [0.1, 0.2] },
-                    { id: 'r2', document: 'Sample doc', metadata: { source: 'demo' }, embedding: [0.3, 0.4] },
-                    { id: 'r3', document: 'Another doc', metadata: { source: 'demo' }, embedding: [0.5, 0.6] }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    };
+    // now backed by official `chromadb` SDK — no mock fallback
   }
 
-  private baseApiPath() {
-    const cfg = this.config || {};
-    let host = cfg.host || 'localhost';
-    if (!host.startsWith('http')) {
-      const proto = cfg.ssl ? 'https' : 'http';
-      const port = cfg.port ? `:${cfg.port}` : '';
-      host = `${proto}://${host}${port}`;
-    }
-    // ensure no trailing slash
-    host = host.replace(/\/$/, '');
-    return `${host}/api/v2`;
+  private sdkArgsFor(cfg?: Partial<{ host?: string; port?: number; ssl?: boolean; tenant?: string; database?: string; apiKey?: string }>) {
+    const c = { ...this.config, ...(cfg || {}) };
+    const headers = c.apiKey ? { 'x-chroma-token': c.apiKey } : undefined;
+    return { host: c.host || 'localhost', port: c.port || 8000, ssl: !!c.ssl, tenant: c.tenant, database: c.database, headers } as any;
   }
 
-  private async request(path: string, method = 'GET', body?: any) {
-    const url = `${this.baseApiPath()}${path}`;
-    const headers: any = { 'content-type': 'application/json' };
-    if (this.config?.apiKey) { headers['x-chroma-token'] = this.config.apiKey; }
-    const fetchFn: any = (globalThis as any).fetch;
-    if (!fetchFn) { throw new Error('fetch is not available in this runtime'); }
-    const res = await fetchFn(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      throw new Error(`${method} ${url} -> ${res.status} ${res.statusText} ${txt}`);
-    }
-    const ct = res.headers.get('content-type') || '';
-    if (ct.includes('application/json')) {
-      return res.json();
-    }
-    return res.text();
-  }
+  // low-level REST helper removed — use SDK AdminClient / Collection methods instead
+
 
   async connect(cfg: { host?: string; port?: number; ssl?: boolean; tenant?: string; database?: string; apiKey?: string }) {
-    this.config = cfg || {};
-    // quick health check against /version to validate connection
+    this.config = { ...(cfg || {}) };
     try {
-      await this.request('/version', 'GET');
+      this.sdkClient = new SDKChromaClient(this.sdkArgsFor());
+      this.adminClient = new AdminClient({ host: this.config.host || 'localhost', port: this.config.port || 8000, ssl: !!this.config.ssl, headers: this.config.apiKey ? { 'x-chroma-token': this.config.apiKey } : undefined });
+      // quick health/version check
+      await this.sdkClient.version();
       this.connected = true;
       return true;
     } catch (err) {
-      // don't throw — keep mock available; caller can check isConnected()
       this.connected = false;
+      this.sdkClient = undefined;
+      this.adminClient = undefined;
       return false;
     }
   }
@@ -83,84 +43,59 @@ export class ChromaDbClient {
   }
 
   async listTenants() {
-    if (!this.connected) { return this.mockData.tenants.map((t: any) => t.name); }
+    if (!this.connected) return [];
+    // SDK does not expose a "listTenants" helper — return current tenant (most UIs use configured tenant)
     try {
-      const json = await this.request('/tenants', 'GET');
-      if (Array.isArray(json)) { return json.map((t: any) => (typeof t === 'string' ? t : t.name || t.id)); }
-      if (json?.tenants) { return json.tenants.map((t: any) => t.name || t); }
-      return [this.config.tenant || 'default_tenant'];
+      const identity = await this.sdkClient!.getUserIdentity();
+      return [identity.tenant || (this.config.tenant || 'default_tenant')];
     } catch (err) {
       return [this.config.tenant || 'default_tenant'];
     }
   }
 
   async listDatabases(tenant?: string) {
-    if (!this.connected) {
-      const t = this.mockData.tenants.find((x: any) => x.name === tenant) || this.mockData.tenants[0];
-      return (t?.databases || []).map((d: any) => d.name);
-    }
-    const tName = encodeURIComponent(tenant || this.config.tenant || 'default_tenant');
+    if (!this.connected || !this.adminClient) return [];
+    const tName = tenant || this.config.tenant || 'default_tenant';
     try {
-      const json = await this.request(`/tenants/${tName}/databases`, 'GET');
-      if (Array.isArray(json)) { return json.map((d: any) => (typeof d === 'string' ? d : d.name)); }
-      if (json?.databases) { return json.databases.map((d: any) => d.name || d.id || d); }
-      return [];
+      const dbs = await this.adminClient.listDatabases({ tenant: tName });
+      return Array.isArray(dbs) ? dbs.map((d: any) => d.name ?? d.id ?? String(d)) : [];
     } catch (err) {
       return [];
     }
   }
 
   async listCollections(tenant?: string, database?: string) {
-    if (!this.connected) {
-      const t = this.mockData.tenants.find((x: any) => x.name === tenant) || this.mockData.tenants[0];
-      const d = (t?.databases || []).find((x: any) => x.name === database) || (t?.databases || [])[0];
-      return (d?.collections || []).map((c: any) => ({ id: c.id || c.name, name: c.name, count: (c.records || []).length }));
-    }
-    const tName = encodeURIComponent(tenant || this.config.tenant || 'default_tenant');
-    const dbName = encodeURIComponent(database || this.config.database || 'default_database');
+    if (!this.connected) return [];
     try {
-      const json = await this.request(`/tenants/${tName}/databases/${dbName}/collections`, 'GET');
-      if (!Array.isArray(json)) { return []; }
-      // normalize to { id, name, count }
-      return json.map((c: any) => ({ id: c.id ?? c.name ?? c, name: c.name ?? c.id ?? c, count: c.count ?? 0 }));
+      const args = this.sdkArgsFor({ tenant, database });
+      const client = new SDKChromaClient(args);
+      const cols = await client.listCollections();
+      return cols.map((c: any) => ({ id: c.id ?? c.name, name: c.name ?? c.id, count: (c.count ?? 0) }));
     } catch (err) {
       return [];
     }
   }
 
   private async resolveCollectionId(tenant: string | undefined, database: string | undefined, collectionOrId: string) {
-    if (!this.connected) { return collectionOrId; }
-    const tName = encodeURIComponent(tenant || this.config.tenant || 'default_tenant');
-    const dbName = encodeURIComponent(database || this.config.database || 'default_database');
+    if (!this.connected) return collectionOrId;
     try {
-      const list = await this.request(`/tenants/${tName}/databases/${dbName}/collections`, 'GET');
-      if (!Array.isArray(list)) { return collectionOrId; }
-      for (const item of list) {
-        if (typeof item === 'string') {
-          if (item === collectionOrId) return item;
-        } else if (item && (item.id === collectionOrId || item.name === collectionOrId)) {
-          return item.id ?? item.name;
-        } else if (item && item.name === collectionOrId && item.id) {
-          return item.id;
-        }
+      const args = this.sdkArgsFor({ tenant, database });
+      const client = new SDKChromaClient(args);
+      const cols = await client.listCollections();
+      for (const item of cols) {
+        if (item.id === collectionOrId || item.name === collectionOrId) return item.id ?? item.name;
       }
     } catch (err) {
-      // ignore and fallback
+      // fallback to original value
     }
     return collectionOrId;
   }
 
   async createCollection(tenant: string | undefined, database: string | undefined, name: string) {
-    if (!this.connected) {
-      const t = this.mockData.tenants[0];
-      const d = t.databases[0];
-      d.collections.push({ name, records: [] });
-      return true;
-    }
-    const tName = encodeURIComponent(tenant || this.config.tenant || 'default_tenant');
-    const dbName = encodeURIComponent(database || this.config.database || 'default_database');
+    if (!this.connected) throw new Error('not connected');
+    const client = new SDKChromaClient(this.sdkArgsFor({ tenant, database }));
     try {
-      await this.request(`/tenants/${tName}/databases/${dbName}/collections`, 'POST', { name });
+      await client.createCollection({ name });
       return true;
     } catch (err) {
       throw err;
@@ -168,17 +103,10 @@ export class ChromaDbClient {
   }
 
   async deleteCollection(tenant: string | undefined, database: string | undefined, name: string) {
-    if (!this.connected) {
-      const t = this.mockData.tenants[0];
-      const d = t.databases[0];
-      d.collections = d.collections.filter((c: any) => c.name !== name);
-      return true;
-    }
-    const tName = encodeURIComponent(tenant || this.config.tenant || 'default_tenant');
-    const dbName = encodeURIComponent(database || this.config.database || 'default_database');
-    const colName = encodeURIComponent(name);
+    if (!this.connected) throw new Error('not connected');
+    const client = new SDKChromaClient(this.sdkArgsFor({ tenant, database }));
     try {
-      await this.request(`/tenants/${tName}/databases/${dbName}/collections/${colName}`, 'DELETE');
+      await client.deleteCollection({ name });
       return true;
     } catch (err) {
       throw err;
@@ -186,27 +114,18 @@ export class ChromaDbClient {
   }
 
   async listRecords(tenant: string | undefined, database: string | undefined, collection: string, limit = 50, offset = 0) {
-    if (!this.connected) {
-      const t = this.mockData.tenants[0];
-      const d = t.databases[0];
-      const c = d.collections.find((x: any) => x.name === collection) || d.collections[0];
-      return (c.records || []).slice(offset, offset + limit) as ChromaRecord[];
-    }
-    const tName = encodeURIComponent(tenant || this.config.tenant || 'default_tenant');
-    const dbName = encodeURIComponent(database || this.config.database || 'default_database');
-    const resolved = await this.resolveCollectionId(tenant, database, collection);
-    const colName = encodeURIComponent(resolved);
+    if (!this.connected) return [];
+    const client = new SDKChromaClient(this.sdkArgsFor({ tenant, database }));
     try {
-      // use /get for listing (more widely supported)
-      const json = await this.request(`/tenants/${tName}/databases/${dbName}/collections/${colName}/get`, 'POST', { limit, offset, include: ['documents', 'metadatas', 'embeddings'] });
-      if (!json) { return []; }
-      const ids = json.ids || json.data?.ids || [];
-      const docs = json.documents || json.data?.documents || [];
-      const metas = json.metadatas || json.data?.metadatas || [];
-      const embs = json.embeddings || json.data?.embeddings || [];
+      const col = await client.getCollection({ name: collection });
+      const res = await col.get({ limit, offset, include: ['documents', 'metadatas', 'embeddings'] });
+      const ids = res.ids || [] as string[];
+      const docs = res.documents || [] as Array<string | null>;
+      const metas = res.metadatas || [] as Array<any>;
+      const embs = res.embeddings || [] as Array<number[] | null>;
       const out: ChromaRecord[] = [];
       for (let i = 0; i < ids.length; i++) {
-        out.push({ id: ids[i], document: docs[i], metadata: metas[i], embedding: embs[i] });
+        out.push({ id: ids[i], document: (docs as any)[i] ?? undefined, metadata: (metas as any)[i] ?? undefined, embedding: (embs as any)[i] ?? undefined });
       }
       return out;
     } catch (err) {
@@ -215,25 +134,15 @@ export class ChromaDbClient {
   }
 
   async addRecord(tenant: string | undefined, database: string | undefined, collection: string, record: Partial<ChromaRecord>) {
-    if (!this.connected) {
-      const t = this.mockData.tenants[0];
-      const d = t.databases[0];
-      const c = d.collections.find((x: any) => x.name === collection);
-      const id = record.id || generateId();
-      const mockEmbedding = (Array.isArray(record.embedding) && record.embedding.length > 0) ? record.embedding : [0.0];
-      c.records.push({ id, document: record.document || '', metadata: record.metadata || {}, embedding: mockEmbedding });
-      return id;
-    }
-    const tName = encodeURIComponent(tenant || this.config.tenant || 'default_tenant');
-    const dbName = encodeURIComponent(database || this.config.database || 'default_database');
-    const resolved = await this.resolveCollectionId(tenant, database, collection);
-    const colName = encodeURIComponent(resolved);
-    const id = record.id || generateId();
-    // include embeddings field (server requires at least one-dimension embedding); default to [0.0] when not provided
+    if (!this.connected) throw new Error('not connected');
+    const client = new SDKChromaClient(this.sdkArgsFor({ tenant, database }));
+    const id = record.id || `id_${Date.now().toString(36)}${Math.random().toString(36).slice(2,8)}`;
     const embeddingToSend = (Array.isArray(record.embedding) && record.embedding.length > 0) ? record.embedding : [0.0];
-    const body: any = { ids: [id], documents: [record.document || ''], metadatas: [record.metadata || {}], embeddings: [embeddingToSend] };
     try {
-      await this.request(`/tenants/${tName}/databases/${dbName}/collections/${colName}/add`, 'POST', body);
+      const col = await client.getOrCreateCollection({ name: collection });
+      const addArgs: any = { ids: [id], documents: [record.document || ''], embeddings: [embeddingToSend] };
+      if (record.metadata !== undefined && Object.keys(record.metadata || {}).length > 0) addArgs.metadatas = [record.metadata];
+      await col.add(addArgs);
       return id;
     } catch (err) {
       throw err;
@@ -241,63 +150,40 @@ export class ChromaDbClient {
   }
 
   async getRecord(tenant: string | undefined, database: string | undefined, collection: string, id: string) {
-    if (!this.connected) {
-      const recs = await this.listRecords(tenant, database, collection);
-      return recs.find((r: any) => r.id === id);
-    }
-    const tName = encodeURIComponent(tenant || this.config.tenant || 'default_tenant');
-    const dbName = encodeURIComponent(database || this.config.database || 'default_database');
-    const resolved = await this.resolveCollectionId(tenant, database, collection);
-    const colName = encodeURIComponent(resolved);
+    if (!this.connected) return undefined;
+    const client = new SDKChromaClient(this.sdkArgsFor({ tenant, database }));
     try {
-      const json = await this.request(`/tenants/${tName}/databases/${dbName}/collections/${colName}/get`, 'POST', { ids: [id], include: ['metadatas', 'documents', 'embeddings'] });
-      const ids = json.ids || [];
-      if (!ids.length) { return undefined; }
-      return { id: ids[0], document: (json.documents || [])[0], metadata: (json.metadatas || [])[0], embedding: (json.embeddings || [])[0] } as ChromaRecord;
+      const col = await client.getCollection({ name: collection });
+      const res = await col.get({ ids: [id], include: ['documents', 'metadatas', 'embeddings'] });
+      const ids = res.ids || [];
+      if (!ids.length) return undefined;
+      return { id: ids[0], document: (res.documents || [])[0], metadata: (res.metadatas || [])[0], embedding: (res.embeddings || [])[0] } as ChromaRecord;
     } catch (err) {
       return undefined;
     }
   }
 
   async queryCollection(tenant: string | undefined, database: string | undefined, collection: string, opts: { queryTexts?: string[]; queryEmbeddings?: number[][]; nResults?: number }) {
-    if (!this.connected) { return []; }
-    const tName = encodeURIComponent(tenant || this.config.tenant || 'default_tenant');
-    const dbName = encodeURIComponent(database || this.config.database || 'default_database');
-    const colName = encodeURIComponent(collection);
-    const body: any = {};
-    if (opts.queryTexts) body.queryTexts = opts.queryTexts;
-    if (opts.queryEmbeddings) body.queryEmbeddings = opts.queryEmbeddings;
-    body.n_results = opts.nResults || 5;
+    if (!this.connected) return [];
+    const client = new SDKChromaClient(this.sdkArgsFor({ tenant, database }));
     try {
-      const json = await this.request(`/tenants/${tName}/databases/${dbName}/collections/${colName}/query`, 'POST', body);
-      return json;
+      const col = await client.getCollection({ name: collection });
+      const qArgs: any = {};
+      if (opts.queryTexts) qArgs.queryTexts = opts.queryTexts;
+      if (opts.queryEmbeddings) qArgs.queryEmbeddings = opts.queryEmbeddings;
+      qArgs.nResults = opts.nResults ?? 5;
+      const res: any = await col.query(qArgs as any);
+      return res as any; // keep shape similar to earlier REST response (ids/documents/metadatas/...)
     } catch (err) {
       return [];
     }
   }
 
-  // tenant / database management
+  // tenant / database management (use REST for exact behavior)
   async createTenant(name: string) {
-    if (!this.connected) {
-      this.mockData.tenants.push({ name, databases: [] });
-      return true;
-    }
+    if (!this.connected || !this.adminClient) throw new Error('not connected');
     try {
-      await this.request(`/tenants`, 'POST', { name });
-      return true;
-    } catch (err) {
-      throw err;
-    }
-  }
-
-  async deleteTenant(name: string) {
-    if (!this.connected) {
-      this.mockData.tenants = this.mockData.tenants.filter((t: any) => t.name !== name);
-      return true;
-    }
-    try {
-      const tName = encodeURIComponent(name);
-      await this.request(`/tenants/${tName}`, 'DELETE');
+      await this.adminClient.createTenant({ name });
       return true;
     } catch (err) {
       throw err;
@@ -305,14 +191,9 @@ export class ChromaDbClient {
   }
 
   async createDatabase(tenant: string, name: string) {
-    if (!this.connected) {
-      const t = this.mockData.tenants.find((x: any) => x.name === tenant) || this.mockData.tenants[0];
-      t.databases.push({ name, collections: [] });
-      return true;
-    }
+    if (!this.connected || !this.adminClient) throw new Error('not connected');
     try {
-      const tName = encodeURIComponent(tenant);
-      await this.request(`/tenants/${tName}/databases`, 'POST', { name });
+      await this.adminClient.createDatabase({ tenant, name });
       return true;
     } catch (err) {
       throw err;
@@ -320,89 +201,66 @@ export class ChromaDbClient {
   }
 
   async deleteDatabase(tenant: string, name: string) {
-    if (!this.connected) {
-      const t = this.mockData.tenants.find((x: any) => x.name === tenant) || this.mockData.tenants[0];
-      t.databases = (t.databases || []).filter((d: any) => d.name !== name);
-      return true;
-    }
+    if (!this.connected || !this.adminClient) throw new Error('not connected');
     try {
-      const tName = encodeURIComponent(tenant);
-      const dbName = encodeURIComponent(name);
-      await this.request(`/tenants/${tName}/databases/${dbName}`, 'DELETE');
+      await this.adminClient.deleteDatabase({ tenant, name });
       return true;
     } catch (err) {
       throw err;
     }
   }
 
-  // collection rename
   async renameCollection(tenant: string | undefined, database: string | undefined, oldName: string, newName: string) {
-    if (!this.connected) {
-      const t = this.mockData.tenants[0];
-      const d = t.databases[0];
-      const c = d.collections.find((x: any) => x.name === oldName);
-      if (c) { c.name = newName; }
-      return true;
-    }
-    const tName = encodeURIComponent(tenant || this.config.tenant || 'default_tenant');
-    const dbName = encodeURIComponent(database || this.config.database || 'default_database');
-    // resolve collection id first (server expects UUID id, not human name)
-    const resolved = await this.resolveCollectionId(tenant, database, oldName);
-    const colName = encodeURIComponent(resolved);
+    if (!this.connected) throw new Error('not connected');
+    const client = new SDKChromaClient(this.sdkArgsFor({ tenant, database }));
     try {
-      await this.request(`/tenants/${tName}/databases/${dbName}/collections/${colName}`, 'PUT', { name: newName });
+      const col = await client.getCollection({ name: oldName });
+      await col.modify({ name: newName });
       return true;
-    } catch (err) {
-      throw err;
-    }
+    } catch (err) { throw err; }
   }
 
-  // record update/delete
   async updateRecord(tenant: string | undefined, database: string | undefined, collection: string, record: Partial<ChromaRecord>) {
-    if (!this.connected) {
-      const t = this.mockData.tenants[0];
-      const d = t.databases[0];
-      const c = d.collections.find((x: any) => x.name === collection);
-      const idx = (c.records || []).findIndex((r: any) => r.id === record.id);
-      if (idx >= 0) {
-        c.records[idx] = { ...c.records[idx], document: record.document ?? c.records[idx].document, metadata: record.metadata ?? c.records[idx].metadata, embedding: record.embedding ?? c.records[idx].embedding };
-        return true;
-      }
-      return false;
-    }
-    const tName = encodeURIComponent(tenant || this.config.tenant || 'default_tenant');
-    const dbName = encodeURIComponent(database || this.config.database || 'default_database');
-    const resolved = await this.resolveCollectionId(tenant, database, collection);
-    const colName = encodeURIComponent(resolved);
-    const body: any = { ids: [record.id] };
-    if (record.document !== undefined) body.documents = [record.document];
-    if (record.metadata !== undefined) body.metadatas = [record.metadata];
-    if (record.embedding !== undefined) body.embeddings = [record.embedding];
+    if (!this.connected) throw new Error('not connected');
+    const client = new SDKChromaClient(this.sdkArgsFor({ tenant, database }));
     try {
-      await this.request(`/tenants/${tName}/databases/${dbName}/collections/${colName}/update`, 'POST', body);
+      const col = await client.getCollection({ name: collection });
+      const args: any = { ids: [record.id] };
+
+      // documents/metadata update (only include embeddings when available or preserved)
+      if (record.document !== undefined) args.documents = [record.document];
+      if (record.metadata !== undefined) args.metadatas = [record.metadata];
+
+      // prefer an explicit embedding; otherwise preserve the existing embedding for this id
+      if (Array.isArray(record.embedding) && record.embedding.length > 0) {
+        args.embeddings = [record.embedding];
+      } else if (record.id) {
+        // try to read the existing record and reuse its embedding so we don't trigger
+        // the SDK to compute embeddings (which fails when no embedding-function is present)
+        try {
+          const existing = await this.getRecord(tenant, database, collection, record.id as string);
+          if (existing?.embedding && Array.isArray(existing.embedding) && existing.embedding.length > 0) {
+            args.embeddings = [existing.embedding];
+          }
+        } catch (_) {
+          // ignore — if we can't fetch existing embedding, don't send embeddings and
+          // let the server decide (may fail)
+        }
+      }
+
+      await col.update(args);
       return true;
-    } catch (err) {
-      throw err;
-    }
+    } catch (err) { throw err; }
   }
 
   async deleteRecord(tenant: string | undefined, database: string | undefined, collection: string, id: string) {
-    if (!this.connected) {
-      const t = this.mockData.tenants[0];
-      const d = t.databases[0];
-      const c = d.collections.find((x: any) => x.name === collection);
-      c.records = (c.records || []).filter((r: any) => r.id !== id);
-      return true;
-    }
-    const tName = encodeURIComponent(tenant || this.config.tenant || 'default_tenant');
-    const dbName = encodeURIComponent(database || this.config.database || 'default_database');
-    const resolved = await this.resolveCollectionId(tenant, database, collection);
-    const colName = encodeURIComponent(resolved);
+    if (!this.connected) throw new Error('not connected');
+    const client = new SDKChromaClient(this.sdkArgsFor({ tenant, database }));
     try {
-      await this.request(`/tenants/${tName}/databases/${dbName}/collections/${colName}/delete`, 'POST', { ids: [id] });
+      const col = await client.getCollection({ name: collection });
+      await col.delete({ ids: [id] });
       return true;
-    } catch (err) {
-      throw err;
-    }
+    } catch (err) { throw err; }
   }
 }
+

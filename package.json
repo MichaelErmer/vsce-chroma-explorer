@@ -91,7 +91,13 @@
         "chromadb.ssl": { "type": "boolean", "default": false },
         "chromadb.tenant": { "type": "string", "default": "default_tenant" },
         "chromadb.database": { "type": "string", "default": "default_database" },
-        "chromadb.apiKey": { "type": "string", "default": "" }
+        "chromadb.apiKey": { "type": "string", "default": "" },
+        "chromadb.defaultEmbedding": {
+          "type": "array",
+          "items": { "type": "number" },
+          "default": [0.0],
+          "description": "Default embedding vector to send when adding records and none is provided."
+        }
       }
     }
   },
