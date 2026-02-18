@@ -2,6 +2,12 @@
 
 A lightweight VS Code extension to explore and manage ChromaDB (tenants, databases, collections and vectors) directly from the editor.
 
+## Preview
+
+![ChromaDB Viewer — Explorer](resources/images/screenshot1.png)
+
+![ChromaDB Viewer — Record view](resources/images/screenshot2.png)
+
 ## Key benefits
 - Browse and manage tenants, databases, collections and records from the Activity Bar
 - Add / view / update / delete records (documents, metadata, embeddings)
