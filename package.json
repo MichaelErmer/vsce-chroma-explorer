@@ -2,100 +2,223 @@
   "name": "vsex-chromadb-viewer",
   "displayName": "ChromaDB Viewer",
   "description": "View and manage ChromaDB (tenants, databases, collections, vectors) from the VS Code sidebar",
-  "version": "0.0.1",
-  "engines": { "vscode": "^1.85.0" },
+  "version": "0.0.2",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
   "publisher": "MichaelErmer",
   "icon": "resources/icons/chroma.png",
-  "categories": ["Other"],
-  "keywords": ["chroma","vector-database","embeddings","database","ml","vectors"],
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "chroma",
+    "vector-database",
+    "embeddings",
+    "database",
+    "ml",
+    "vectors"
+  ],
   "license": "MIT",
-  "galleryBanner": { "color": "#7c3aed", "theme": "dark" },
+  "galleryBanner": {
+    "color": "#7c3aed",
+    "theme": "dark"
+  },
   "homepage": "https://github.com/MichaelErmer/vsce-chroma-explorer",
-  "repository": { "type": "git", "url": "https://github.com/MichaelErmer/vsce-chroma-explorer.git" },
-  "bugs": { "url": "https://github.com/MichaelErmer/vsce-chroma-explorer/issues" },
-  "activationEvents": ["onView:chromadbExplorer", "onCommand:chromadb.connect"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MichaelErmer/vsce-chroma-explorer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MichaelErmer/vsce-chroma-explorer/issues"
+  },
+  "activationEvents": [
+    "onView:chromadbExplorer",
+    "onCommand:chromadb.connect"
+  ],
   "main": "./out/extension.js",
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -w -p .",
     "build-webview": "cd webview-ui && npm install && npm run build",
     "prepare": "npm run compile && npm run build-webview",
-
     "test:docker:up": "docker compose up -d --remove-orphans",
     "test:docker:down": "docker compose down --volumes",
     "test:seed": "tsx ./scripts/seed-chromadb.ts",
     "test:setup": "npm run test:docker:up && npm run test:seed",
     "test:teardown": "npm run test:docker:down",
-
     "test:integration": "node ./out/test/runTest.js",
     "test": "npm run test:integration"
   },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
-        { "id": "chromadb-explorer", "title": "ChromaDB", "icon": "resources/icons/chroma.png" }
+        {
+          "id": "chromadb-explorer",
+          "title": "ChromaDB",
+          "icon": "resources/icons/chroma.png"
+        }
       ]
     },
     "views": {
       "chromadb-explorer": [
-        { "id": "chromadbExplorer", "name": "Explorer", "type": "tree" },
-        { "id": "chromadbConnection", "name": "Connection", "type": "webview" }
+        {
+          "id": "chromadbExplorer",
+          "name": "Explorer",
+          "type": "tree"
+        },
+        {
+          "id": "chromadbConnection",
+          "name": "Connection",
+          "type": "webview"
+        }
       ]
     },
     "commands": [
-      { "command": "chromadb.connect", "title": "ChromaDB: Connect" },
-      { "command": "chromadb.refresh", "title": "Refresh", "icon": "$(refresh)" },
-
-      { "command": "chromadb.createTenant", "title": "ChromaDB: Create Tenant" },
-      { "command": "chromadb.deleteTenant", "title": "ChromaDB: Delete Tenant" },
-
-      { "command": "chromadb.createDatabase", "title": "ChromaDB: Create Database" },
-      { "command": "chromadb.deleteDatabase", "title": "ChromaDB: Delete Database" },
-
-      { "command": "chromadb.createCollection", "title": "ChromaDB: Create Collection" },
-      { "command": "chromadb.renameCollection", "title": "ChromaDB: Rename Collection" },
-      { "command": "chromadb.deleteCollection", "title": "ChromaDB: Delete Collection" },
-      { "command": "chromadb.queryCollection", "title": "ChromaDB: Query Collection" },
-
-      { "command": "chromadb.viewRecord", "title": "ChromaDB: View Record" },
-      { "command": "chromadb.addRecord", "title": "ChromaDB: Add Record" },
-      { "command": "chromadb.updateRecord", "title": "ChromaDB: Update Record" },
-      { "command": "chromadb.deleteRecord", "title": "ChromaDB: Delete Record" }
+      {
+        "command": "chromadb.connect",
+        "title": "ChromaDB: Connect"
+      },
+      {
+        "command": "chromadb.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "chromadb.createTenant",
+        "title": "ChromaDB: Create Tenant"
+      },
+      {
+        "command": "chromadb.deleteTenant",
+        "title": "ChromaDB: Delete Tenant"
+      },
+      {
+        "command": "chromadb.createDatabase",
+        "title": "ChromaDB: Create Database"
+      },
+      {
+        "command": "chromadb.deleteDatabase",
+        "title": "ChromaDB: Delete Database"
+      },
+      {
+        "command": "chromadb.createCollection",
+        "title": "ChromaDB: Create Collection"
+      },
+      {
+        "command": "chromadb.renameCollection",
+        "title": "ChromaDB: Rename Collection"
+      },
+      {
+        "command": "chromadb.deleteCollection",
+        "title": "ChromaDB: Delete Collection"
+      },
+      {
+        "command": "chromadb.queryCollection",
+        "title": "ChromaDB: Query Collection"
+      },
+      {
+        "command": "chromadb.viewRecord",
+        "title": "ChromaDB: View Record"
+      },
+      {
+        "command": "chromadb.addRecord",
+        "title": "ChromaDB: Add Record"
+      },
+      {
+        "command": "chromadb.updateRecord",
+        "title": "ChromaDB: Update Record"
+      },
+      {
+        "command": "chromadb.deleteRecord",
+        "title": "ChromaDB: Delete Record"
+      }
     ],
     "menus": {
       "view/title": [
-        { "command": "chromadb.refresh", "when": "view == chromadbExplorer", "group": "navigation" }
+        {
+          "command": "chromadb.refresh",
+          "when": "view == chromadbExplorer",
+          "group": "navigation"
+        }
       ],
       "view/item/context": [
-        { "command": "chromadb.createDatabase", "when": "viewItem == tenant" },
-
-
-        { "command": "chromadb.createCollection", "when": "viewItem == database" },
-        { "command": "chromadb.deleteDatabase", "when": "viewItem == database" },
-
-        { "command": "chromadb.queryCollection", "when": "viewItem == collection" },
-        { "command": "chromadb.renameCollection", "when": "viewItem == collection" },
-        { "command": "chromadb.deleteCollection", "when": "viewItem == collection" },
-        { "command": "chromadb.addRecord", "when": "viewItem == collection" },
-
-        { "command": "chromadb.viewRecord", "when": "viewItem == record" },
-        { "command": "chromadb.updateRecord", "when": "viewItem == record" },
-        { "command": "chromadb.deleteRecord", "when": "viewItem == record" }
+        {
+          "command": "chromadb.createDatabase",
+          "when": "viewItem == tenant"
+        },
+        {
+          "command": "chromadb.createCollection",
+          "when": "viewItem == database"
+        },
+        {
+          "command": "chromadb.deleteDatabase",
+          "when": "viewItem == database"
+        },
+        {
+          "command": "chromadb.queryCollection",
+          "when": "viewItem == collection"
+        },
+        {
+          "command": "chromadb.renameCollection",
+          "when": "viewItem == collection"
+        },
+        {
+          "command": "chromadb.deleteCollection",
+          "when": "viewItem == collection"
+        },
+        {
+          "command": "chromadb.addRecord",
+          "when": "viewItem == collection"
+        },
+        {
+          "command": "chromadb.viewRecord",
+          "when": "viewItem == record"
+        },
+        {
+          "command": "chromadb.updateRecord",
+          "when": "viewItem == record"
+        },
+        {
+          "command": "chromadb.deleteRecord",
+          "when": "viewItem == record"
+        }
       ]
     },
     "configuration": {
       "title": "ChromaDB: Connection",
       "properties": {
-        "chromadb.host": { "type": "string", "default": "localhost" },
-        "chromadb.port": { "type": "number", "default": 8000 },
-        "chromadb.ssl": { "type": "boolean", "default": false },
-        "chromadb.tenant": { "type": "string", "default": "default_tenant" },
-        "chromadb.database": { "type": "string", "default": "default_database" },
-        "chromadb.apiKey": { "type": "string", "default": "" },
+        "chromadb.host": {
+          "type": "string",
+          "default": "localhost"
+        },
+        "chromadb.port": {
+          "type": "number",
+          "default": 8000
+        },
+        "chromadb.ssl": {
+          "type": "boolean",
+          "default": false
+        },
+        "chromadb.tenant": {
+          "type": "string",
+          "default": "default_tenant"
+        },
+        "chromadb.database": {
+          "type": "string",
+          "default": "default_database"
+        },
+        "chromadb.apiKey": {
+          "type": "string",
+          "default": ""
+        },
         "chromadb.defaultEmbedding": {
           "type": "array",
-          "items": { "type": "number" },
-          "default": [0.0],
+          "items": {
+            "type": "number"
+          },
+          "default": [
+            0
+          ],
           "description": "Default embedding vector to send when adding records and none is provided."
         }
       }
@@ -108,13 +231,11 @@
     "@types/vscode": "^1.85.0",
     "typescript": "^5.3.0",
     "tsx": "^3.12.7",
-
     "mocha": "^10.2.0",
     "@types/mocha": "^10.0.1",
     "chai": "^4.3.8",
     "@types/chai": "^4.3.0",
     "@vscode/test-electron": "^2.3.0",
-
     "@types/node": "^20.5.0",
     "glob": "^8.1.0",
     "@types/glob": "^8.1.0"
